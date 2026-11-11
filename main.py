@@ -2,13 +2,32 @@
 import os
 import argparse
 from functools import partial
+import torch
 
 from board import AI
 from minimax_ai import get_ai_move
 from gui import run_game
 from network import Connect4Net
+from network_v2 import Connect4NetV2
 from train import load_checkpoint
 from mcts import MCTS
+
+
+def load_model_auto(model_path: str):
+    """Checkpoint yapısını inceleyerek v1 (465K) veya v2 (116K) modelini otomatik oluşturur ve yükler."""
+    ckpt = torch.load(model_path, map_location="cpu")
+    state = ckpt.get("model_state", ckpt)
+    iteration = ckpt.get("iteration", 0)
+
+    # v2 mimarisinde 1x1 conv başlıkları veya batchnorm vardır
+    if "policy_conv.weight" in state or "bn1.weight" in state:
+        model = Connect4NetV2()
+    else:
+        model = Connect4Net()
+
+    model.load_state_dict(state)
+    model.eval()
+    return model, iteration
 
 
 def main():
@@ -22,9 +41,7 @@ def main():
     eval_fn = None
 
     if args.model and os.path.exists(args.model):
-        model = Connect4Net()
-        iteration = load_checkpoint(model, args.model)
-        model.eval()
+        model, iteration = load_model_auto(args.model)
         mcts = MCTS(model, num_simulations=args.sims)
 
         # Analiz ve değerlendirme fonksiyonları
@@ -32,7 +49,7 @@ def main():
         eval_fn = mcts.evaluate_board
         ai_fn = lambda board: mcts.best_move(board, current_player=AI)
         ai_name = f"AlphaZero (iter_{iteration:03d}, {args.sims} sim)"
-        print(f"AlphaZero modeli yüklendi: {args.model} (İterasyon: {iteration})")
+        print(f"AlphaZero modeli yüklendi: {args.model} ({type(model).__name__}, İterasyon: {iteration})")
     else:
         if args.model:
             print(f"Uyarı: Model dosyası bulunamadı ({args.model}), varsayılan Minimax kullanılıyor.")

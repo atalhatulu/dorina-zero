@@ -25,6 +25,11 @@ COVERAGE_JSON = os.path.join(LOGS_DIR, "coverage.json")
 
 def load_iterations_data():
     """iterations.csv dosyasını oku."""
+    # Her okumada log dosyasından en güncel CSV'yi oluştur
+    try:
+        import parse_log_to_csv
+    except Exception:
+        pass
     if os.path.exists(ITERATIONS_CSV):
         try:
             df = pd.read_csv(ITERATIONS_CSV)
@@ -65,13 +70,25 @@ st.sidebar.header("⚙️ Kontroller")
 
 stage_mode = st.sidebar.radio(
     "Görüntülenen Aşama",
-    options=["Aşama 2 (116K Model - Aktif)", "Aşama 1 (465K Model - Arşiv)"],
+    options=["Aşama 3 (Kararlı 20 İter - Aktif)", "Aşama 2 (116K Model - Arşiv)", "Aşama 1 (465K Model - Arşiv)"],
     index=0,
 )
 
-is_stage2 = "Aşama 2" in stage_mode
-CHECKPOINTS_DIR = "checkpoints_v2" if is_stage2 else "checkpoints"
-ITERATIONS_CSV = os.path.join("logs_v2", "iterations_v2.csv") if is_stage2 else os.path.join("logs", "iterations.csv")
+if "Aşama 3" in stage_mode:
+    CHECKPOINTS_DIR = os.path.join("checkpoints", "connect4")
+    ITERATIONS_CSV = os.path.join("logs_v3", "iterations_v3.csv")
+    ACTIVE_LOG_FILE = "training_20iter_stable.log"
+    total_target = 20
+elif "Aşama 2" in stage_mode:
+    CHECKPOINTS_DIR = "checkpoints_v2"
+    ITERATIONS_CSV = os.path.join("logs_v2", "iterations_v2.csv")
+    ACTIVE_LOG_FILE = "training_v2.log"
+    total_target = 30
+else:
+    CHECKPOINTS_DIR = "checkpoints"
+    ITERATIONS_CSV = os.path.join("logs", "iterations.csv")
+    ACTIVE_LOG_FILE = "training_30iter.log"
+    total_target = 30
 
 if st.sidebar.button("🔄 Şimdi Yenile"):
     st.rerun()
@@ -139,7 +156,7 @@ total_target = 30  # Hedef iterasyon sayısı
 
 # Eğitimin aktif olup olmadığını ilgili log dosyasının son değişiklik zamanından anla
 is_training_active = False
-target_log = "training_v2_stage2.log" if is_stage2 else "training_v4.log"
+target_log = ACTIVE_LOG_FILE
 if os.path.exists(target_log):
     mtime = os.path.getmtime(target_log)
     # Son 3 dakika içinde log dosyasına yazılmışsa eğitim aktiftir
@@ -147,7 +164,7 @@ if os.path.exists(target_log):
         is_training_active = True
 
 # Checkpoint dosyalarının gerçek disk zaman damgalarını al
-ckpt_pattern = os.path.join(CHECKPOINTS_DIR, "v2_iter_*.pt" if is_stage2 else "iter_*.pt")
+ckpt_pattern = os.path.join(CHECKPOINTS_DIR, "v2_iter_*.pt" if "Aşama 2" in stage_mode else "iter_*.pt")
 ckpt_files = sorted(glob.glob(ckpt_pattern))
 ckpt_times = []
 for cf in ckpt_files:
