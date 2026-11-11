@@ -202,29 +202,6 @@ else:
         )
     with col_status:
         st.success("🟢 Eğitim Sürüyor")
-    # Aktif iterasyon içi geçen süreyi son checkpoint zamanından hesapla
-    last_ckpt_time = ckpt_times[-1][1] if ckpt_times else time.time()
-    elapsed_current = max(0.0, time.time() - last_ckpt_time)
-    iter_progress = min(elapsed_current / avg_iter_sec, 0.95)
-
-    # Genel zaman/iterasyon bazlı hassas ilerleme
-    base_progress = current_iter / total_target
-    fine_progress = min(max(base_progress + (iter_progress / total_target), 0.0), 0.99)
-
-    remaining_iters = total_target - current_iter
-    remaining_sec = max(0.0, (remaining_iters * avg_iter_sec) - elapsed_current)
-    remaining_min = remaining_sec / 60.0
-
-    col_prog, col_status = st.columns([3, 1])
-    with col_prog:
-        st.progress(fine_progress)
-        st.caption(
-            f"🚀 Genel İlerleme: **%{fine_progress * 100:.1f}** | "
-            f"İterasyon {current_iter + 1}/{total_target} içi: **%{iter_progress * 100:.0f}** ({elapsed_current:.0f}s / ~{avg_iter_sec:.0f}s) | "
-            f"Kalan: **~{remaining_sec:.0f}s** (~{remaining_min:.1f} dk)"
-        )
-    with col_status:
-        st.success("🟢 Eğitim Sürüyor")
 
 st.divider()
 
