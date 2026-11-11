@@ -5,12 +5,31 @@ import argparse
 import numpy as np
 import torch
 
+from collections import deque
 from network import Connect4Net
 from replay_buffer import ReplayBuffer
 from train import train, save_checkpoint, load_checkpoint
 import logger
 from run_self_play import parallel_self_play
 from coverage_tracker import get_tracker, track_position
+
+
+class TrainingProgress:
+    """Eğitim ilerleme yüzdesi ve ETA takipçisi."""
+    def __init__(self, target_iter, window_size=10):
+        self.target_iter = target_iter
+        self.durations = deque(maxlen=window_size)
+
+    def update(self, current_iter, duration_sec):
+        self.durations.append(duration_sec)
+        avg_sec = sum(self.durations) / len(self.durations)
+        remaining_iters = max(0, self.target_iter - current_iter)
+        eta_sec = remaining_iters * avg_sec
+        eta_min = eta_sec / 60.0
+        pct = (current_iter / max(self.target_iter, 1)) * 100.0
+
+        print(f"[Iter {current_iter}/{self.target_iter}] Tamamlandı. Süre: {duration_sec:.0f}s (ort: {avg_sec:.0f}s)")
+        print(f"  İlerleme: %{pct:.1f} | Kalan: ~{remaining_iters} iterasyon (~{eta_min:.1f} dk)\n")
 
 
 def evaluate_vs_random(model, num_games=20, num_simulations=50):
@@ -67,10 +86,11 @@ def main():
     parser.add_argument("--sims", type=int, default=100)
     parser.add_argument("--epochs", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=64)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--buffer-size", type=int, default=100_000)
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--resume", type=str, default=None)
+    parser.add_argument("--total-iterations", type=int, default=None, help="Toplam hedef iterasyon numarası")
     args = parser.parse_args()
 
     # Model
@@ -83,7 +103,10 @@ def main():
     os.makedirs("checkpoints", exist_ok=True)
     buffer = ReplayBuffer(capacity=args.buffer_size)
 
-    print(f"Toplam iterasyon: {args.iterations}")
+    target_iter = args.total_iterations if args.total_iterations else (start_iter + args.iterations)
+    progress_tracker = TrainingProgress(target_iter=target_iter, window_size=10)
+
+    print(f"Toplam iterasyon hedefi: {target_iter} (Başlangıç: {start_iter})")
     print(f"Her iterasyon: {args.games_per_iter} oyun, {args.sims} sim, {args.epochs} epoch")
     print(f"Buffer boyutu: {args.buffer_size}")
     print()
@@ -155,7 +178,7 @@ def main():
         print(f"  Kaydedildi: {ckpt_path}")
 
         total_dt = time.time() - iter_start
-        print(f"[Iter {iteration}] Toplam: {total_dt:.1f}s\n")
+        progress_tracker.update(current_iter=iteration, duration_sec=total_dt)
 
     print("Eğitim tamamlandı!")
 

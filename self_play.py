@@ -14,7 +14,7 @@ import logger
 
 
 def play_one_game(model, num_simulations=200, temperature=1.0,
-                  temp_threshold=10, game_id=None, iteration=0,
+                  temp_threshold=6, game_id=None, iteration=0,
                   log=True):
     """
     Bir self-play oyunu oynat.

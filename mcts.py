@@ -8,7 +8,7 @@ from board import (
     get_next_open_row, get_valid_locations,
     winning_move, is_full, clone_board,
 )
-from network import board_to_tensor
+from network import board_to_tensor, predict
 
 
 class MCTSNode:
@@ -124,7 +124,7 @@ class MCTS:
             n.value_sum += v_for_node
 
     def search(self, board, current_player, temperature=1.0,
-               dirichlet_alpha=1.0, dirichlet_epsilon=0.15):
+               dirichlet_alpha=1.0, dirichlet_epsilon=0.10):
         # Oyun bittiyse: hamle yok, geçerli sütunlara eşit dağıt
         if winning_move(board, PLAYER) or winning_move(board, AI) or is_full(board):
             probs = np.zeros(COLS, dtype=np.float32)
@@ -175,6 +175,37 @@ class MCTS:
     def best_move(self, board, current_player):
         probs = self.search(board, current_player, temperature=0)
         return int(np.argmax(probs))
+
+    def evaluate_board(self, board, current_player):
+        """
+        MCTS yapmadan tek bir forward pass ile tahtayı hızlıca değerlendirir.
+        Dönüş: (value, win_probability)
+          value: -1.0 .. 1.0 (current_player perspektifinden)
+          win_probability: 0.0 .. 100.0 (yüzde)
+        """
+        _, value = predict(self.model, board, current_player)
+        win_prob = (value + 1.0) / 2.0 * 100.0
+        return float(value), float(win_prob)
+
+    def analyze(self, board, current_player):
+        """
+        MCTS araması yaparak detaylı analiz döndürür.
+        Dönüş: {
+            'best_move': int,
+            'policy': np.ndarray (7 olasılık),
+            'value': float (-1..1),
+            'win_probability': float (0..100)
+        }
+        """
+        policy = self.search(board, current_player, temperature=0)
+        best_col = int(np.argmax(policy))
+        value, win_prob = self.evaluate_board(board, current_player)
+        return {
+            "best_move": best_col,
+            "policy": policy,
+            "value": value,
+            "win_probability": win_prob,
+        }
 
 
 def sample_move(probs, rng=None):

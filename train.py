@@ -25,12 +25,11 @@ class SelfPlayDataset(Dataset):
         )
 
 
-def train_one_epoch(model, data, batch_size=64, lr=1e-3, device="cpu"):
+def train_one_epoch(model, data, optimizer, batch_size=64, device="cpu"):
     """Bir epoch eğit. (avg_policy_loss, avg_value_loss) döndür."""
     model.train()
     dataset = SelfPlayDataset(data)
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
 
     total_policy_loss = 0.0
     total_value_loss = 0.0
@@ -67,11 +66,14 @@ def train_one_epoch(model, data, batch_size=64, lr=1e-3, device="cpu"):
     )
 
 
-def train(model, data, epochs=1, batch_size=64, lr=1e-3, device="cpu"):
+def train(model, data, epochs=1, batch_size=64, lr=1e-3, device="cpu", optimizer=None):
     """N epoch eğit. (policy_loss, value_loss) döndür (son epoch)."""
+    if optimizer is None:
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+
     pl, vl = 0.0, 0.0
     for epoch in range(epochs):
-        pl, vl = train_one_epoch(model, data, batch_size, lr, device)
+        pl, vl = train_one_epoch(model, data, optimizer=optimizer, batch_size=batch_size, device=device)
     return pl, vl
 
 

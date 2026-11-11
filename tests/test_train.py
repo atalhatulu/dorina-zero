@@ -41,7 +41,8 @@ def test_replay_buffer_capacity():
 def test_train_one_epoch_runs():
     model = Connect4Net()
     data = make_fake_data(32)
-    pl, vl = train_one_epoch(model, data, batch_size=8, lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    pl, vl = train_one_epoch(model, data, optimizer=optimizer, batch_size=8)
     assert pl > 0
     assert vl >= 0
 
@@ -50,9 +51,10 @@ def test_train_reduces_loss():
     """Aynı veriyle birkaç epoch → loss düşmeli."""
     model = Connect4Net()
     data = make_fake_data(64)
-    pl1, vl1 = train_one_epoch(model, data, batch_size=8, lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    pl1, vl1 = train_one_epoch(model, data, optimizer=optimizer, batch_size=8)
     for _ in range(3):
-        pl2, vl2 = train_one_epoch(model, data, batch_size=8, lr=1e-3)
+        pl2, vl2 = train_one_epoch(model, data, optimizer=optimizer, batch_size=8)
     assert pl2 < pl1, f"Policy loss düşmedi: {pl1} → {pl2}"
     assert vl2 < vl1, f"Value loss düşmedi: {vl1} → {vl2}"
 
