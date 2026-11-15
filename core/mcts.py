@@ -24,14 +24,14 @@ class MCTSNode:
         return self.value_sum / self.visits
 
     def is_leaf(self):
-        return not self.is_expanded
+        return not self.is_expanded or len(self.children) == 0
 
 
 class TranspositionTable:
-    """Sabit boyutlu LRU Cache (OrderedDict)."""
+    """LRU önbellek: state_key -> (policy, value)."""
     def __init__(self, maxsize=30_000):
-        self.maxsize = maxsize
         self.cache = collections.OrderedDict()
+        self.maxsize = maxsize
 
     def get(self, key):
         if key in self.cache:
@@ -39,12 +39,13 @@ class TranspositionTable:
             return self.cache[key]
         return None
 
-    def put(self, key, value):
+    def put(self, key, policy, value):
         if key in self.cache:
             self.cache.move_to_end(key)
-        self.cache[key] = value
-        if len(self.cache) > self.maxsize:
-            self.cache.popitem(last=False)
+        else:
+            if len(self.cache) >= self.maxsize:
+                self.cache.popitem(last=False)
+        self.cache[key] = (policy, value)
 
     def clear(self):
         self.cache.clear()
@@ -79,33 +80,36 @@ class GenericMCTS:
                 policy_logits, value = self.model(x)
                 policy = torch.softmax(policy_logits, dim=1).squeeze(0).cpu().numpy()
                 v = value.item()
-            self.tt.put(key, (policy, v))
+            self.tt.put(key, policy, v)
 
         valid_mask = self.game.get_valid_moves(state, current_player)
         masked_policy = np.zeros(self.game.action_space_size, dtype=np.float32)
         valid_indices = np.where(valid_mask)[0]
-
-        for idx in valid_indices:
-            masked_policy[idx] = policy[idx]
+        for a in valid_indices:
+            masked_policy[a] = policy[a]
 
         s = masked_policy.sum()
         if s > 0:
             masked_policy /= s
         else:
-            for idx in valid_indices:
-                masked_policy[idx] = 1.0 / len(valid_indices)
+            for a in valid_indices:
+                masked_policy[a] = 1.0 / len(valid_indices)
 
-        for idx in valid_indices:
-            node.children[idx] = MCTSNode(prior=masked_policy[idx], player_just_moved=current_player)
+        for a in valid_indices:
+            node.children[a] = MCTSNode(prior=masked_policy[a], player_just_moved=current_player)
+
         node.is_expanded = True
         return v
 
     def _select(self, node):
         best_score = -float("inf")
         best_action = None
+        total_visits = sum(child.visits for child in node.children.values())
+        sqrt_total = math.sqrt(total_visits + 1)
+
         for action, child in node.children.items():
-            q = -child.q_value() if child.visits > 0 else 0.0
-            u = self.c_puct * child.prior * (math.sqrt(node.visits) / (1 + child.visits))
+            q = child.q_value()
+            u = self.c_puct * child.prior * sqrt_total / (1 + child.visits)
             score = q + u
             if score > best_score:
                 best_score = score
@@ -151,7 +155,7 @@ class GenericMCTS:
         self._expand(root, state, current_player)
         root.visits = 1
 
-        if dirichlet_epsilon > 0 and len(root.children) > 0:
+        if temperature > 0 and dirichlet_epsilon > 0 and len(root.children) > 0:
             noise = np.random.dirichlet([dirichlet_alpha] * len(root.children))
             for i, child in enumerate(root.children.values()):
                 child.prior = ((1 - dirichlet_epsilon) * child.prior + dirichlet_epsilon * noise[i])
@@ -163,48 +167,24 @@ class GenericMCTS:
         for action, child in root.children.items():
             visits[action] = child.visits
 
-        if visits.sum() == 0:
+        s = visits.sum()
+        if s == 0:
             valid_mask = self.game.get_valid_moves(state, current_player)
             valid_indices = np.where(valid_mask)[0]
-            for idx in valid_indices:
-                visits[idx] = 1.0
+            for a in valid_indices:
+                visits[a] = 1.0
+            visits /= visits.sum()
+            return visits
 
         if temperature == 0:
-            probs = np.zeros(self.game.action_space_size, dtype=np.float32)
-            probs[np.argmax(visits)] = 1.0
-            return probs
+            pi = np.zeros_like(visits)
+            pi[np.argmax(visits)] = 1.0
+            return pi
 
-        visits_t = visits ** (1.0 / temperature)
-        probs = visits_t / visits_t.sum()
-        return probs
-
-    def best_move(self, state, current_player):
-        probs = self.search(state, current_player, temperature=0)
-        return int(np.argmax(probs))
-
-    def evaluate_state(self, state, current_player):
-        """Hızlı NN değerlendirmesi (MCTS simülasyonu yapmadan)."""
-        self.model.eval()
-        with torch.no_grad():
-            x = torch.from_numpy(self.game.encode_state(state, current_player)).unsqueeze(0)
-            _, value = self.model(x)
-            val = float(value.item())
-            win_prob = float((val + 1.0) / 2.0 * 100.0)
-            return val, win_prob
-
-    def analyze(self, state, current_player):
-        policy = self.search(state, current_player, temperature=0)
-        best_col = int(np.argmax(policy))
-        val, win_prob = self.evaluate_state(state, current_player)
-        return {
-            "best_move": best_col,
-            "policy": policy,
-            "value": val,
-            "win_probability": win_prob,
-        }
+        visits = visits ** (1.0 / temperature)
+        return visits / visits.sum()
 
 
-def sample_move(probs, rng=None):
-    if rng is None:
-        rng = np.random.default_rng()
-    return int(rng.choice(len(probs), p=probs))
+def sample_move(pi):
+    """Politika dağılımından hamle seç."""
+    return int(np.random.choice(len(pi), p=pi))

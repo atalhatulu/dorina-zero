@@ -2,11 +2,10 @@ venv/
 __pycache__/
 *.pyc
 logs/
-checkpoints/
-*.pt
+checkpoints/archive/
+checkpoints/*.pt
+checkpoints/connect4/
 *.log
 .pytest_cache/
-logs_v2/
-checkpoints_v2/
 *.onnx
 *.onnx.data

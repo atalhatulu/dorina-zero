@@ -10,7 +10,7 @@ class OthelloGame(BaseGame):
     def __init__(self):
         self._name = "Othello"
         self._action_space_size = BOARD_SIZE * BOARD_SIZE + 1  # 64 kare + 1 pass hamlesi
-        self._board_shape = (2, BOARD_SIZE, BOARD_SIZE)
+        self._board_shape = (3, BOARD_SIZE, BOARD_SIZE)
 
     @property
     def name(self) -> str:
@@ -99,7 +99,8 @@ class OthelloGame(BaseGame):
         opp = 3 - player
         me_ch = (state == player).astype(np.float32)
         opp_ch = (state == opp).astype(np.float32)
-        return np.stack([me_ch, opp_ch], axis=0)
+        turn_ch = np.ones((BOARD_SIZE, BOARD_SIZE), dtype=np.float32)
+        return np.stack([me_ch, opp_ch, turn_ch], axis=0)
 
     def clone_state(self, state):
         return state.copy()

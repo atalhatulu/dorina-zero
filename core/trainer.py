@@ -25,8 +25,14 @@ class GenericTrainer:
     def __init__(self, model, lr=2e-4, weight_decay=1e-4, value_weight=2.0, device="cpu"):
         self.model = model.to(device)
         self.device = device
+        self.lr = lr
+        self.weight_decay = weight_decay
         self.value_weight = value_weight
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    def reset_optimizer(self):
+        """Gating reddedildiginde eski agirliklara ait Adam momentum durumunu sifirlar."""
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
 
     def train_epoch(self, data, batch_size=64):
         self.model.train()
