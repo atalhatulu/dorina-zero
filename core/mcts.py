@@ -76,7 +76,8 @@ class GenericMCTS:
         else:
             with torch.no_grad():
                 encoded = self.game.encode_state(state, current_player)
-                x = torch.from_numpy(encoded).unsqueeze(0)
+                device = next(self.model.parameters()).device if list(self.model.parameters()) else torch.device("cpu")
+                x = torch.from_numpy(encoded).unsqueeze(0).to(device)
                 policy_logits, value = self.model(x)
                 policy = torch.softmax(policy_logits, dim=1).squeeze(0).cpu().numpy()
                 v = value.item()

@@ -291,7 +291,8 @@ def parallel_self_play(model_factory, model, game_factory, num_games=300,
     if num_workers is None:
         num_workers = max(1, (os.cpu_count() or 4) - 1)
 
-    model_state = model.state_dict()
+    # Worker'lar CPU üzerinde çalışır, GPU tensörleri multiprocessing havuzuna aktarılamaz
+    model_state = {k: v.cpu() for k, v in model.state_dict().items()}
 
     # Historical modellerin state'lerini topla
     historical_states = {}
@@ -519,8 +520,8 @@ def evaluate_gating_parallel(model_factory, model_a, model_b, game_factory,
         task_specs.append((op, 1))
         task_specs.append((op, 2))
 
-    state_a = model_a.state_dict()
-    state_b = model_b.state_dict()
+    state_a = {k: v.cpu() for k, v in model_a.state_dict().items()}
+    state_b = {k: v.cpu() for k, v in model_b.state_dict().items()}
 
     with mp.Pool(
         processes=num_workers,
