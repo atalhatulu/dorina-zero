@@ -40,25 +40,26 @@ def score_position(board, piece):
     return score
 
 
-def minimax(board, depth, alpha, beta, maximizing):
+def minimax(board, depth, alpha, beta, maximizing, ai_player=AI):
+    opp_player = PLAYER if ai_player == AI else AI
     valid = get_valid_locations(board)
-    terminal = winning_move(board, AI) or winning_move(board, PLAYER) or not valid
+    terminal = winning_move(board, ai_player) or winning_move(board, opp_player) or not valid
     if depth == 0 or terminal:
         if terminal:
-            if winning_move(board, AI):
+            if winning_move(board, ai_player):
                 return None, 1_000_000
-            if winning_move(board, PLAYER):
+            if winning_move(board, opp_player):
                 return None, -1_000_000
             return None, 0
-        return None, score_position(board, AI)
+        return None, score_position(board, ai_player)
 
     if maximizing:
         value, column = -math.inf, random.choice(valid)
         for col in valid:
             row = get_next_open_row(board, col)
             b = [r[:] for r in board]
-            drop_piece(b, row, col, AI)
-            s = minimax(b, depth - 1, alpha, beta, False)[1]
+            drop_piece(b, row, col, ai_player)
+            s = minimax(b, depth - 1, alpha, beta, False, ai_player)[1]
             if s > value:
                 value, column = s, col
             alpha = max(alpha, value)
@@ -70,8 +71,8 @@ def minimax(board, depth, alpha, beta, maximizing):
         for col in valid:
             row = get_next_open_row(board, col)
             b = [r[:] for r in board]
-            drop_piece(b, row, col, PLAYER)
-            s = minimax(b, depth - 1, alpha, beta, True)[1]
+            drop_piece(b, row, col, opp_player)
+            s = minimax(b, depth - 1, alpha, beta, True, ai_player)[1]
             if s < value:
                 value, column = s, col
             beta = min(beta, value)
@@ -80,7 +81,7 @@ def minimax(board, depth, alpha, beta, maximizing):
         return column, value
 
 
-def get_ai_move(board, depth=4):
-    """AI'ın (oyuncu AI) oynayacağı sütunu döndürür."""
-    col, _ = minimax(board, depth, -math.inf, math.inf, True)
+def get_ai_move(board, depth=4, ai_player=AI):
+    """Belirtilen ai_player (PLAYER=1 veya AI=2) icin en iyi sutunu dondurur."""
+    col, _ = minimax(board, depth, -math.inf, math.inf, True, ai_player)
     return col
