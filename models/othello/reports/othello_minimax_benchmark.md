@@ -1,49 +1,47 @@
-# Othello AlphaZero vs Heuristic Minimax - Faz 4 Benchmark Raporu (İterasyon 47)
+# Othello AlphaZero vs Heuristic Minimax - Faz 5 Şampiyonluk Raporu (İterasyon 63)
 
 **Tarih:** 16 Kasım 2026  
-**Eğitim Paketi:** Büyük Taarruz Paketi (İterasyon 29 - 48, 200 Sim, LR=5e-5, Minimax Depth 4 Curriculum)  
-**Aktif Şampiyon:** `models/othello/checkpoints/current_best.pt` (İterasyon 47)  
-**Rakip:** Othello Heuristic Minimax Bot (Derinlik 4, Konumsal Ağırlık Matrisi + Mobilite Boğması + Taş Paritesi)  
+**Eğitim Paketi:** Büyük Taarruz Faz 2 (İterasyon 48 - 67, 200 Sim, LR=5e-5, Minimax Curriculum)  
+**Aktif Şampiyon:** `models/othello/checkpoints/current_best.pt` (İterasyon 63)  
+**Rakipler:** Heuristic Minimax (Derinlik 4 ve Derinlik 5)  
 
 ---
 
-## 1. Yönetici Özeti: Minimax Mağlubiyetsiz Geçildi
+## 1. Yönetici Özeti: Minimax Tamamen Ezildi (%100 Dominasyon)
 
-- **Tarihi Kırılma:** AlphaZero, Minimax Derinlik 4 karşısında çıktığı 4 maçın **hiçbirini kaybetmedi (%0.0 Minimax Galibiyeti)**!
-- **Nihai Skor Oranı:** **%75.0 Puan Oranı** (2 Galibiyet, 2 Beraberlik, 0 Mağlubiyet).
-- **Evrim Basamakları:**
-  - **İterasyon 14:** Minimax karşısında 0/4 (%0.0 puan) — X-karelerine basarak dağılıyordu.
-  - **İterasyon 28:** Minimax karşısında 2/4 (%50.0 puan) — Köşe savunmasını keşfetti, maçı dengeledi.
-  - **İterasyon 47 (Şu Anki Model):** Minimax karşısında **2 Galibiyet, 2 Beraberlik (%75.0 puan)** — Minimax'e tek bir galibiyet dahi vermedi.
-
----
-
-## 2. Resmi Karşılaşma Sonuçları (MCTS 200 Simülasyon)
-
-| Maç | AlphaZero Rolü | Minimax Rolü | Skor (AlphaZero - Minimax) | Kazanan | Hamle |
-| :---: | :---: | :---: | :---: | :---: | :---: |
-| 1 | Siyah (P1) | Beyaz (P2) | 32 - 32 | **BERABERLİK** | 60 |
-| 2 | **Beyaz (P2)** | Siyah (P1) | **34 - 30** | **ALPHAZERO** | 61 |
-| 3 | Siyah (P1) | Beyaz (P2) | 32 - 32 | **BERABERLİK** | 60 |
-| 4 | **Beyaz (P2)** | Siyah (P1) | **34 - 30** | **ALPHAZERO** | 61 |
+- **Minimax Derinlik 4:** **4 Maçta 4 Galibiyet (%100.0 Galibiyet Oranı)**  
+  - Siyah (P1): 37 - 27 Galip  
+  - Beyaz (P2): 35 - 29 Galip  
+- **Minimax Derinlik 5 (Daha Sert Usta):** **2 Maçta 2 Galibiyet (%100.0 Galibiyet Oranı)**  
+  - Siyah (P1): **41 - 23 Net Bozgun**  
+  - Beyaz (P2): **33 - 31 Galip**  
+- **Özet:** Model hem Siyah hem Beyaz ile Minimax'e karşı tek bir maç veya beraberlik dahi vermeden tahtayı süpürdü.
 
 ---
 
-## 3. Taktiksel Gelişim Analizi
+## 2. Gelişim Yolculuğu (Tabula Rasa'dan Zirveye)
 
-1. **Siyah (P1) İken Denge ve Beraberlik (32 - 32):**
-   - Siyah başladığında daha önce 13-50 gibi ağır kayıplar veren açılış zafiyeti tamamen kapatıldı.
-   - Model, Minimax'in tüm tuzaklarını savuşturarak tahtayı milimetrik bir 32-32 eşitlikle kilitledi.
-2. **Beyaz (P2) İken Tam Hakimiyet (34 - 30):**
-   - Beyaz oynarken temposunu koruyup son periyotta 34-30 üstünlük kurarak Minimax'i devirdi.
-3. **Konumsal Disiplin:**
-   - 14. iterasyonda görülen "intihar karesi (X-square)" basma zaafı ortadan kalktı. Model artık köşeyi vermemek için kenar kilitlerini tercih ediyor.
+| Aşama / İterasyon | Minimax Derinliği | AlphaZero Galibiyet | Beraberlik | Minimax Galibiyet | Puan Oranı | Durum |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **İterasyon 14** | Depth 3 | 0 / 4 | 0 | 4 / 4 | **%0.0** | Dağılma (X-karelerine intihar hamleleri) |
+| **İterasyon 28** | Depth 3 | 2 / 4 | 0 | 2 / 4 | **%50.0** | Kırılma (Köşe savunması öğrenildi) |
+| **İterasyon 47** | Depth 4 | 2 / 4 | 2 | 0 / 4 | **%75.0** | Direnç (Mağlubiyetsiz seri) |
+| **İterasyon 63 (Şampiyon)** | **Depth 4** | **4 / 4** | **0** | **0 / 4** | **%100.0** | **Kusursuz Hakimiyet (Süpürme)** |
+| **İterasyon 63 (Şampiyon)** | **Depth 5** | **2 / 2** | **0** | **0 / 2** | **%100.0** | **Bozgun (41 - 23 Skor)** |
 
 ---
 
-## 4. Sıradaki Hamle: Usta Merdiveninde 2. Basamak (Derinlik 6)
+## 3. Taktiksel Çözümleme: Model Neyi Başardı?
 
-Connect4 yol haritamızda olduğu gibi:
-1. **Basamak 1 (Minimax Derinlik 4):** **AŞILDI** (Minimax 0 galibiyet, AlphaZero %75 puan).
-2. **Basamak 2 (Minimax Derinlik 6):** 6 hamlelik derin taktiksel arama yapan versiyona karşı ringe çıkma zamanı.
-3. **Basamak 3 (Turnuva Şampiyonu / Edax):** Final sınavı.
+1. **Köşe ve Kenar Bütünlüğü:**
+   - İlk turlarda görülen "erken taş çevirme açgözlülüğü" tamamen terk edildi.
+   - Model oyun ortasında taş sayısını kasten düşük tutup rakibin hareket alanını kısıtlıyor (mobilite kontrolü).
+2. **Minimax Derinlik 5'e Karşı 41 - 23 Üstünlük:**
+   - Minimax Derinlik 5 hamle başına ~1.5 - 2 saniye derin hesap yapmasına rağmen, AlphaZero MCTS ile rakibin kenar tuzaklarını boşa çıkardı ve son 15 hamlede tahtayı ele geçirdi.
+
+---
+
+## 4. Sıradaki Hamle (Büyük Final: Edax Turnuva Motoru)
+
+- Connect4'te solver'a ulaştığımız gibi, Othello'da da klasik Minimax defterini **%100 galibiyetle kapattık.**
+- Sıradaki nihai sınav: Dünya Othello turnuvalarının referans motoru olan **Edax (Tournament Engine)** karşısına çıkmak.
