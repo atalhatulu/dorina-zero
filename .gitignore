@@ -7,5 +7,6 @@ checkpoints/*.pt
 checkpoints/connect4/
 *.log
 .pytest_cache/
-*.onnx
-*.onnx.data
+models/*/checkpoints/iter_*.pt
+models/*/logs/*.csv
+models/*/logs/*.json

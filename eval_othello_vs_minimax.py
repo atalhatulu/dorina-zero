@@ -55,8 +55,12 @@ def play_duel(model, game, model_player, mcts_sims=200, minimax_depth=4, verbose
 
 
 def main():
+    default_ckpt = "models/othello/checkpoints/current_best.pt"
+    if not os.path.exists(default_ckpt) and os.path.exists("checkpoints/othello/current_best.pt"):
+        default_ckpt = "checkpoints/othello/current_best.pt"
+
     parser = argparse.ArgumentParser(description="Othello AlphaZero vs Heuristic Minimax")
-    parser.add_argument("--checkpoint", type=str, default="checkpoints/othello/current_best.pt")
+    parser.add_argument("--checkpoint", type=str, default=default_ckpt)
     parser.add_argument("--sims", type=int, default=200, help="AlphaZero MCTS simülasyon adedi")
     parser.add_argument("--depth", type=int, default=4, help="Minimax arama derinliği")
     parser.add_argument("--games", type=int, default=10, help="Toplam maç adedi (yarı yarıya renk dağılımı)")

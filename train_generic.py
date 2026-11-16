@@ -100,8 +100,18 @@ def main():
         start_iter = load_checkpoint(model, args.resume)
         print(f"Fine-tune başlangıç checkpoint'i yüklendi: {args.resume} (iter: {start_iter:03d})")
 
-    ckpt_dir = args.out_dir if args.out_dir else os.path.join("checkpoints", args.game)
+    if args.out_dir:
+        ckpt_dir = args.out_dir
+        # Eğer özel out-dir verilmişse logları onun yanına veya içine yerleştir
+        log_dir_name = os.path.join(os.path.dirname(ckpt_dir.rstrip("/")), "logs") if "checkpoints" in ckpt_dir else os.path.join(ckpt_dir, "logs")
+    else:
+        # Standart Birleşik Yapı: models/<game>/
+        base_model_dir = os.path.join("models", args.game)
+        ckpt_dir = os.path.join(base_model_dir, "checkpoints")
+        log_dir_name = os.path.join(base_model_dir, "logs")
+
     os.makedirs(ckpt_dir, exist_ok=True)
+    os.makedirs(log_dir_name, exist_ok=True)
 
     current_best_path = os.path.join(ckpt_dir, "current_best.pt")
     if args.resume and os.path.exists(args.resume):
@@ -129,8 +139,6 @@ def main():
         t0 = time.time()
         print(f"\n[Iter {iteration:03d}] Self-play ({args.games_per_iter} oyun, {args.sims} sim)...")
 
-        target_name = os.path.basename(os.path.normpath(args.out_dir)) if args.out_dir else args.game
-        log_dir_name = os.path.join("logs", target_name)
         status_file = os.path.join(log_dir_name, "live_status.json")
         try:
             os.makedirs(os.path.dirname(status_file), exist_ok=True)
