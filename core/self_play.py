@@ -12,6 +12,12 @@ from minimax_ai import get_ai_move
 from minimax_fast import get_ai_move_v2
 from perfect_solver import get_solver_best_move
 from games.othello_minimax import get_othello_ai_move
+try:
+    from eval_othello_vs_edax import EdaxBot, action_to_gtp, gtp_to_action
+except ImportError:
+    EdaxBot = None
+    action_to_gtp = None
+    gtp_to_action = None
 
 
 def augment_with_horizontal_flip(history, win_player):
@@ -168,7 +174,27 @@ def play_curriculum_game(model, game: BaseGame, model_player=1, minimax_depth=6,
             board_copy = game.clone_state(state)
             action = None
             if "othello" in game.name.lower():
-                action = get_othello_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
+                if _worker_args and _worker_args.get("curriculum_mode") == "edax" and EdaxBot is not None:
+                    # Edax Bot ile hızlı profesyonel hamle seçimi
+                    edax_level = minimax_depth or 1
+                    edax = EdaxBot(level=edax_level)
+                    try:
+                        # O anki renk
+                        bot_color = "black" if current_player == 1 else "white"
+                        # Daha önce oynanan hamleleri Edax tahtasına replay et
+                        replay_state = game.get_initial_state()
+                        rp = 1
+                        for ma in moves_played:
+                            c_str = "black" if rp == 1 else "white"
+                            edax.play_move(c_str, action_to_gtp(ma))
+                            replay_state = game.get_next_state(replay_state, ma, rp)
+                            rp = 2 if rp == 1 else 1
+                        gtp_m = edax.genmove(bot_color)
+                        action = gtp_to_action(gtp_m)
+                    finally:
+                        edax.close()
+                if action is None:
+                    action = get_othello_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
             else:
                 if _worker_args and _worker_args.get("curriculum_mode") == "solver":
                     action, _, _ = get_solver_best_move(moves_played)
