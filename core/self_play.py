@@ -11,6 +11,7 @@ from games.base_game import BaseGame
 from minimax_ai import get_ai_move
 from minimax_fast import get_ai_move_v2
 from perfect_solver import get_solver_best_move
+from games.othello_minimax import get_othello_ai_move
 
 
 def augment_with_horizontal_flip(history, win_player):
@@ -166,13 +167,16 @@ def play_curriculum_game(model, game: BaseGame, model_player=1, minimax_depth=6,
         else:
             board_copy = game.clone_state(state)
             action = None
-            if _worker_args and _worker_args.get("curriculum_mode") == "solver":
-                action, _, _ = get_solver_best_move(moves_played)
-            if action is None:
-                if minimax_depth >= 8:
-                    action = get_ai_move_v2(board_copy, depth=minimax_depth, ai_player=current_player)
-                else:
-                    action = get_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
+            if "othello" in game.name.lower():
+                action = get_othello_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
+            else:
+                if _worker_args and _worker_args.get("curriculum_mode") == "solver":
+                    action, _, _ = get_solver_best_move(moves_played)
+                if action is None:
+                    if minimax_depth >= 8:
+                        action = get_ai_move_v2(board_copy, depth=minimax_depth, ai_player=current_player)
+                    else:
+                        action = get_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
             policy = np.zeros(game.action_space_size, dtype=np.float32)
             policy[action] = 1.0
             history.append((encoded, policy, current_player))
@@ -319,14 +323,23 @@ def parallel_self_play(model_factory, model, game_factory, num_games=300,
         model_player = 1 if (j % 2 == 0) else 2
         task_specs.append((num_self_play + j, "historical", (chosen_hist, model_player)))
 
-    # 3. Curriculum (Kenar & Asimetrik Açılışlar Dahil)
-    edge_openings = [
-        [1, 1], [4, 2, 6], [0, 4, 1, 5], [5, 4, 3, 1],
-        [0, 0], [6, 6], [1, 5], [0, 6], None
-    ]
+    # 3. Curriculum
+    temp_game = game_factory()
+    is_othello = "othello" in temp_game.name.lower()
+    if is_othello:
+        # Othello için rastgele 2-4 ply tarafsız açılış havuzu
+        openings_pool = _generate_gating_openings(temp_game, max(1, num_curriculum), min_ply=2, max_ply=4)
+        if not openings_pool:
+            openings_pool = [None]
+    else:
+        openings_pool = [
+            [1, 1], [4, 2, 6], [0, 4, 1, 5], [5, 4, 3, 1],
+            [0, 0], [6, 6], [1, 5], [0, 6], None
+        ]
+
     for k in range(num_curriculum):
         model_player = 1 if (k % 2 == 0) else 2
-        chosen_opening = edge_openings[k % len(edge_openings)]
+        chosen_opening = openings_pool[k % len(openings_pool)]
         task_specs.append((num_self_play + num_historical + k, "curriculum", (model_player, chosen_opening)))
 
     if verbose:
