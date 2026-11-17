@@ -203,9 +203,14 @@ def play_curriculum_game(model, game: BaseGame, model_player=1, minimax_depth=6,
                         action = get_ai_move_v2(board_copy, depth=minimax_depth, ai_player=current_player)
                     else:
                         action = get_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
-            policy = np.zeros(game.action_space_size, dtype=np.float32)
-            policy[action] = 1.0
-            history.append((encoded, policy, current_player))
+
+            # Bot hamlesi için MCTS süzgeci ve yumuşatılmış politika (Soft Teacher Distribution)
+            # %100 hard Dirac etiketi yerine, MCTS dağılımı ile harmanlayarak gradyan patlamasını engeller
+            mcts_policy = mcts.search(state, current_player, temperature=1.0, dirichlet_epsilon=0.0)
+            policy = 0.3 * mcts_policy
+            policy[action] += 0.7
+            policy = policy / np.sum(policy)
+            history.append((encoded, policy.astype(np.float32), current_player))
 
         moves_played.append(action)
         state = game.get_next_state(state, action, current_player)
