@@ -15,6 +15,18 @@ from network_othello import OthelloNet
 from core.mcts import GenericMCTS
 
 
+STANDARD_OTHELLO_OPENINGS = [
+    [],              # #0: Standart başlangıç (Mainline)
+    [19, 18],        # #1: Diagonal Opening (d3 c3)
+    [19, 34],        # #2: Perpendicular Opening (d3 c5)
+    [19, 20],        # #3: Parallel Opening (d3 e3)
+    [19, 18, 26],    # #4: Tiger / Heath varyasyonu (d3 c3 c4)
+    [19, 34, 45],    # #5: Rose varyasyonu (d3 c5 f6)
+    [26, 18, 19],    # #6: Simetrik Diagonal (c4 c3 d3)
+    [37, 43, 34],    # #7: Ters Perpendicular (f5 d6 c5)
+]
+
+
 def action_to_gtp(action: int) -> str:
     """Action indexini (0..64) GTP koordinatına ('f5', 'd6', 'pass') çevirir."""
     if action == 64:
@@ -92,7 +104,7 @@ class EdaxBot:
             self.proc.terminate()
 
 
-def play_match(game, mcts, edax, model_player: int, verbose: bool = True):
+def play_match(game, mcts, edax, model_player: int, opening_moves=None, verbose: bool = True):
     """
     Tek maç oynatır.
     model_player: 1 (Siyah / black) veya 2 (Beyaz / white)
@@ -101,6 +113,14 @@ def play_match(game, mcts, edax, model_player: int, verbose: bool = True):
     current_player = 1
     move_count = 0
     edax.reset()
+
+    if opening_moves:
+        for om in opening_moves:
+            color_str = "black" if current_player == 1 else "white"
+            edax.play_move(color_str, action_to_gtp(om))
+            state = game.get_next_state(state, om, current_player)
+            current_player = 3 - current_player
+            move_count += 1
 
     while True:
         term = game.check_terminal_value(state, current_player)
@@ -139,9 +159,57 @@ def play_match(game, mcts, edax, model_player: int, verbose: bool = True):
 
     if verbose:
         role = "Siyah (P1)" if model_player == 1 else "Beyaz (P2)"
-        print(f"  Maç Sonu: Model {role} | Skor: Model {model_score} - {edax_score} Edax | Kazanan: {result.upper()} ({move_count} hamle)")
+        opening_label = "Standart" if not opening_moves else " ".join(action_to_gtp(om) for om in opening_moves)
+        print(f"  Maç Sonu: Model {role} [Açılış: {opening_label}] | Skor: Model {model_score} - {edax_score} Edax | Kazanan: {result.upper()} ({move_count} hamle)")
 
     return result, model_score, edax_score
+
+
+def _run_edax_series(model, game, level: int = 1, sims: int = 100, games: int = 4, verbose: bool = True):
+    """Modeli Edax'a karşı eşleştirilmiş çoklu açılış serisinde sınar."""
+    import time
+
+    was_training = model.training
+    model.eval()
+    mcts = GenericMCTS(model=model, game=game, num_simulations=sims, c_puct=1.5)
+    edax = EdaxBot(level=level)
+
+    results = {"model": 0, "edax": 0, "draw": 0}
+    total_model_discs = 0
+    total_edax_discs = 0
+    t0 = time.time()
+
+    try:
+        for g in range(games):
+            pair_idx = g // 2
+            opening = STANDARD_OTHELLO_OPENINGS[pair_idx % len(STANDARD_OTHELLO_OPENINGS)]
+            model_player = 1 if (g % 2 == 0) else 2
+            res, m_score, e_score = play_match(
+                game, mcts, edax, model_player, opening_moves=opening, verbose=verbose
+            )
+            results[res] += 1
+            total_model_discs += m_score
+            total_edax_discs += e_score
+    finally:
+        edax.close()
+        if was_training:
+            model.train()
+
+    dt = time.time() - t0
+    score_rate = (results["model"] + 0.5 * results["draw"]) / max(games, 1)
+    return {
+        "score_rate": score_rate,
+        "results": results,
+        "total_model_discs": total_model_discs,
+        "total_edax_discs": total_edax_discs,
+        "duration": dt,
+    }
+
+
+def evaluate_model_vs_edax(model, game, level: int = 1, sims: int = 100, games: int = 4, verbose: bool = True) -> float:
+    """Eğitim içi gating doğrulaması için çoklu açılışlı Edax puan oranını [0.0, 1.0] döndürür."""
+    summary = _run_edax_series(model, game, level=level, sims=sims, games=games, verbose=verbose)
+    return summary["score_rate"]
 
 
 def main():
@@ -164,32 +232,18 @@ def main():
     model.eval()
     iter_num = ckpt.get("iteration", "Bilinmeyen")
 
-    mcts = GenericMCTS(model=model, game=game, num_simulations=args.sims, c_puct=1.5)
-    edax = EdaxBot(level=args.level)
-
     print(f"\n=== Othello Şampiyonu (İter {iter_num}) vs Edax Tournament Engine (Level {args.level}) ===")
-    print(f"Toplam {args.games} maç yapılacak (MCTS {args.sims} simülasyon)...")
+    print(f"Toplam {args.games} maç yapılacak (MCTS {args.sims} simülasyon, çoklu standart açılışlar)...")
 
-    results = {"model": 0, "edax": 0, "draw": 0}
-    total_model_discs = 0
-    total_edax_discs = 0
-
-    import time
-    t0 = time.time()
-
-    try:
-        for g in range(args.games):
-            model_player = 1 if (g % 2 == 0) else 2
-            res, m_score, e_score = play_match(game, mcts, edax, model_player, verbose=True)
-            results[res] += 1
-            total_model_discs += m_score
-            total_edax_discs += e_score
-    finally:
-        edax.close()
-
-    dt = time.time() - t0
+    summary = _run_edax_series(
+        model, game, level=args.level, sims=args.sims, games=args.games, verbose=True
+    )
+    results = summary["results"]
+    dt = summary["duration"]
+    total_model_discs = summary["total_model_discs"]
+    total_edax_discs = summary["total_edax_discs"]
     win_pct = results["model"] / args.games * 100.0
-    score_rate = (results["model"] + 0.5 * results["draw"]) / args.games * 100.0
+    score_rate = summary["score_rate"] * 100.0
 
     print("\n" + "=" * 55)
     print("🏆 NİHAİ DÜELLO SKOR TABLOSU (ALPHAZERO vs EDAX)")

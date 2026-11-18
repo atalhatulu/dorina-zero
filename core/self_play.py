@@ -136,8 +136,8 @@ def play_curriculum_game(model, game: BaseGame, model_player=1, minimax_depth=6,
                          num_simulations=150, temperature=1.0, temp_threshold=12,
                          dirichlet_epsilon=0.25, dirichlet_alpha=1.0, opening_moves=None):
     """
-    Model vs Minimax curriculum oyunu.
-    Tüm win/loss/draw oyunları eşit şekilde ve yatay simetri augmentation ile buffer'a aktarılır.
+    Model vs Minimax/Edax curriculum oyunu.
+    Tüm win/loss/draw oyunları eşit şekilde ve simetri augmentation ile buffer'a aktarılır.
     """
     mcts = GenericMCTS(model, game=game, num_simulations=num_simulations)
     state = game.get_initial_state()
@@ -145,77 +145,82 @@ def play_curriculum_game(model, game: BaseGame, model_player=1, minimax_depth=6,
     history = []
     move_count = 0
 
-    if opening_moves:
-        for om in opening_moves:
-            state = game.get_next_state(state, om, current_player)
-            move_count += 1
-            current_player = 2 if current_player == 1 else 1
+    edax = None
+    use_edax = (
+        "othello" in game.name.lower()
+        and _worker_args is not None
+        and _worker_args.get("curriculum_mode") == "edax"
+        and EdaxBot is not None
+    )
+    if use_edax:
+        edax = EdaxBot(level=minimax_depth or 1)
 
-    moves_played = list(opening_moves) if opening_moves else []
+    try:
+        if opening_moves:
+            for om in opening_moves:
+                if edax is not None:
+                    c_str = "black" if current_player == 1 else "white"
+                    edax.play_move(c_str, action_to_gtp(om))
+                state = game.get_next_state(state, om, current_player)
+                move_count += 1
+                current_player = 2 if current_player == 1 else 1
 
-    while True:
-        terminal_val = game.check_terminal_value(state, current_player)
-        if terminal_val is not None:
-            break
+        moves_played = list(opening_moves) if opening_moves else []
 
-        encoded = game.encode_state(state, current_player)
+        while True:
+            terminal_val = game.check_terminal_value(state, current_player)
+            if terminal_val is not None:
+                break
 
-        if current_player == model_player:
-            temp = temperature if move_count < temp_threshold else 0.0
-            policy = mcts.search(
-                state, current_player,
-                temperature=temp,
-                dirichlet_alpha=dirichlet_alpha,
-                dirichlet_epsilon=dirichlet_epsilon
-            )
-            action = sample_move(policy)
-            history.append((encoded, policy.copy(), current_player))
-        else:
-            board_copy = game.clone_state(state)
-            action = None
-            if "othello" in game.name.lower():
-                if _worker_args and _worker_args.get("curriculum_mode") == "edax" and EdaxBot is not None:
-                    # Edax Bot ile hızlı profesyonel hamle seçimi
-                    edax_level = minimax_depth or 1
-                    edax = EdaxBot(level=edax_level)
-                    try:
-                        # O anki renk
+            encoded = game.encode_state(state, current_player)
+
+            if current_player == model_player:
+                temp = temperature if move_count < temp_threshold else 0.0
+                policy = mcts.search(
+                    state, current_player,
+                    temperature=temp,
+                    dirichlet_alpha=dirichlet_alpha,
+                    dirichlet_epsilon=dirichlet_epsilon
+                )
+                action = sample_move(policy)
+                if edax is not None:
+                    c_str = "black" if current_player == 1 else "white"
+                    edax.play_move(c_str, action_to_gtp(action))
+                history.append((encoded, policy.copy(), current_player))
+            else:
+                board_copy = game.clone_state(state)
+                action = None
+                if "othello" in game.name.lower():
+                    if edax is not None:
                         bot_color = "black" if current_player == 1 else "white"
-                        # Daha önce oynanan hamleleri Edax tahtasına replay et
-                        replay_state = game.get_initial_state()
-                        rp = 1
-                        for ma in moves_played:
-                            c_str = "black" if rp == 1 else "white"
-                            edax.play_move(c_str, action_to_gtp(ma))
-                            replay_state = game.get_next_state(replay_state, ma, rp)
-                            rp = 2 if rp == 1 else 1
                         gtp_m = edax.genmove(bot_color)
                         action = gtp_to_action(gtp_m)
-                    finally:
-                        edax.close()
-                if action is None:
-                    action = get_othello_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
-            else:
-                if _worker_args and _worker_args.get("curriculum_mode") == "solver":
-                    action, _, _ = get_solver_best_move(moves_played)
-                if action is None:
-                    if minimax_depth >= 8:
-                        action = get_ai_move_v2(board_copy, depth=minimax_depth, ai_player=current_player)
-                    else:
-                        action = get_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
+                    if action is None:
+                        action = get_othello_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
+                else:
+                    if _worker_args and _worker_args.get("curriculum_mode") == "solver":
+                        action, _, _ = get_solver_best_move(moves_played)
+                    if action is None:
+                        if minimax_depth >= 8:
+                            action = get_ai_move_v2(board_copy, depth=minimax_depth, ai_player=current_player)
+                        else:
+                            action = get_ai_move(board_copy, depth=minimax_depth, ai_player=current_player)
 
-            # Bot hamlesi için MCTS süzgeci ve yumuşatılmış politika (Soft Teacher Distribution)
-            # %100 hard Dirac etiketi yerine, MCTS dağılımı ile harmanlayarak gradyan patlamasını engeller
-            mcts_policy = mcts.search(state, current_player, temperature=1.0, dirichlet_epsilon=0.0)
-            policy = 0.3 * mcts_policy
-            policy[action] += 0.7
-            policy = policy / np.sum(policy)
-            history.append((encoded, policy.astype(np.float32), current_player))
+                # Bot hamlesi için MCTS süzgeci ve yumuşatılmış politika (Soft Teacher Distribution)
+                # %100 hard Dirac etiketi yerine, MCTS dağılımı ile harmanlayarak gradyan patlamasını engeller
+                mcts_policy = mcts.search(state, current_player, temperature=1.0, dirichlet_epsilon=0.0)
+                policy = 0.3 * mcts_policy
+                policy[action] += 0.7
+                policy = policy / np.sum(policy)
+                history.append((encoded, policy.astype(np.float32), current_player))
 
-        moves_played.append(action)
-        state = game.get_next_state(state, action, current_player)
-        move_count += 1
-        current_player = 2 if current_player == 1 else 1
+            moves_played.append(action)
+            state = game.get_next_state(state, action, current_player)
+            move_count += 1
+            current_player = 2 if current_player == 1 else 1
+    finally:
+        if edax is not None:
+            edax.close()
 
     last_player = 2 if current_player == 1 else 1
     term_from_last = game.check_terminal_value(state, last_player)

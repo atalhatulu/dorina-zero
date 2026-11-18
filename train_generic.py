@@ -206,7 +206,12 @@ def main():
         except Exception:
             pass
 
-        train_data = buffer.sample(min(len(buffer), 20_000), max_draw_ratio=args.max_draw_ratio)
+        if "othello" in args.game.lower():
+            # İlk iterasyonlarda soğuk buffer kaynaklı 8x D4 value overfitting'ini önle
+            effective_sample_cap = min(max(len(buffer) // 4, 3000), 20_000)
+            train_data = buffer.sample(min(len(buffer), effective_sample_cap), max_draw_ratio=args.max_draw_ratio)
+        else:
+            train_data = buffer.sample(min(len(buffer), 20_000), max_draw_ratio=args.max_draw_ratio)
         pl, vl = trainer.train(train_data, epochs=args.epochs, batch_size=args.batch_size)
         print(f"  Eğitim bitti: policy_loss={pl:.4f}, value_loss={vl:.4f}")
 
@@ -261,9 +266,22 @@ def main():
             print(f"  Gating Sonucu: YeniModel={w} current_best={l} Beraberlik={d} (Skor Oranı: %{score_rate*100:.1f})")
 
             if score_rate >= args.gating_threshold:
-                save_checkpoint(model, current_best_path, iteration)
-                load_checkpoint(current_best_model, current_best_path)
-                print(f"  TERFİ: Yeni model current_best.pt olarak güncellendi! (%{score_rate*100:.1f} >= %{args.gating_threshold*100:.0f})")
+                promote = True
+                if "othello" in args.game.lower() and args.curriculum == "edax":
+                    from eval_othello_vs_edax import evaluate_model_vs_edax
+                    print("  [Edax Veto Gating] Yeni model Edax Level 1'e karşı sınanıyor (4 maç, 150 sim)...")
+                    edax_score = evaluate_model_vs_edax(model, game, level=1, sims=150, games=4, verbose=True)
+                    if edax_score < 0.60:
+                        promote = False
+                        print(f"  VETO: Edax Level 1 skoru %{edax_score*100:.1f} < %60.0 — Terfi iptal edildi, ağırlıklar sıfırlanıyor.")
+
+                if promote:
+                    save_checkpoint(model, current_best_path, iteration)
+                    load_checkpoint(current_best_model, current_best_path)
+                    print(f"  TERFİ: Yeni model current_best.pt olarak güncellendi! (%{score_rate*100:.1f} >= %{args.gating_threshold*100:.0f})")
+                else:
+                    load_checkpoint(model, current_best_path)
+                    trainer.reset_optimizer()
             else:
                 load_checkpoint(model, current_best_path)
                 trainer.reset_optimizer()
