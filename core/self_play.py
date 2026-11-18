@@ -373,9 +373,13 @@ def parallel_self_play(model_factory, model, game_factory, num_games=300,
         ]
 
     for k in range(num_curriculum):
-        model_player = 1 if (k % 2 == 0) else 2
+        # Othello için Siyah (P1) açılış zafiyetini gidermek adına %67 P1 ağırlığı
+        if is_othello:
+            model_player = 2 if (k % 3 == 0) else 1
+        else:
+            model_player = 1 if (k % 2 == 0) else 2
         chosen_opening = openings_pool[k % len(openings_pool)]
-        # Othello için hibrit curriculum: yarısı seviye 1 (çapa), yarısı seviye 2
+        # Othello için hibrit curriculum: seviye 1 çapa + seviye 2
         curr_depth = curriculum_depth
         if is_othello and curriculum_mode == "edax" and curriculum_depth >= 2:
             curr_depth = 1 if (k % 2 == 0) else curriculum_depth
