@@ -276,12 +276,16 @@ def _worker_task(task_spec):
     game_id, task_type, extra_arg = task_spec
 
     if task_type == "curriculum":
-        model_player, opening_moves = extra_arg
+        if len(extra_arg) == 3:
+            model_player, opening_moves, c_depth = extra_arg
+        else:
+            model_player, opening_moves = extra_arg
+            c_depth = _worker_args["curriculum_depth"]
         data, winner, moves = play_curriculum_game(
             _worker_model,
             _worker_game,
             model_player=model_player,
-            minimax_depth=_worker_args["curriculum_depth"],
+            minimax_depth=c_depth,
             num_simulations=_worker_args["num_simulations"],
             temp_threshold=_worker_args["temp_threshold"],
             dirichlet_epsilon=_worker_args["dirichlet_epsilon"],
@@ -371,12 +375,19 @@ def parallel_self_play(model_factory, model, game_factory, num_games=300,
     for k in range(num_curriculum):
         model_player = 1 if (k % 2 == 0) else 2
         chosen_opening = openings_pool[k % len(openings_pool)]
-        task_specs.append((num_self_play + num_historical + k, "curriculum", (model_player, chosen_opening)))
+        # Othello için hibrit curriculum: yarısı seviye 1 (çapa), yarısı seviye 2
+        curr_depth = curriculum_depth
+        if is_othello and curriculum_mode == "edax" and curriculum_depth >= 2:
+            curr_depth = 1 if (k % 2 == 0) else curriculum_depth
+        task_specs.append((num_self_play + num_historical + k, "curriculum", (model_player, chosen_opening, curr_depth)))
 
     if verbose:
         details = []
         if num_curriculum > 0:
-            details.append(f"{num_curriculum} {curriculum_mode} curriculum")
+            if is_othello and curriculum_mode == "edax" and curriculum_depth >= 2:
+                details.append(f"{num_curriculum} hibrit edax curriculum (L1 & L{curriculum_depth})")
+            else:
+                details.append(f"{num_curriculum} {curriculum_mode} curriculum")
         if num_historical > 0:
             details.append(f"{num_historical} historical vs {hist_names}")
         extra_str = f" (+ {', '.join(details)})" if details else ""
